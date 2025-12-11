@@ -9,7 +9,7 @@ public class DamageCalculations : MonoBehaviour
     {
         if (PlayerResources != null)
         {
-            PlayerResources.TakeDamage(10);
+            PlayerResources.UseHealth(10);
         }
     }
     

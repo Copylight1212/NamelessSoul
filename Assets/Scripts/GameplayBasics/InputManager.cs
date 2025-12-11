@@ -9,6 +9,9 @@ public class InputManager : MonoBehaviour
     public KeyCode leftKey = KeyCode.A;
     public KeyCode rightKey = KeyCode.D;
     public KeyCode runKey = KeyCode.LeftShift;
+    public KeyCode jumpKey = KeyCode.Space;
+    public KeyCode dashKey = KeyCode.LeftControl;
+    public KeyCode skillKey = KeyCode.E;
 
     [Header("Camera Key Bindings")]
     public KeyCode zoomInKey = KeyCode.KeypadPlus;      // + key (same key as =)
@@ -54,6 +57,11 @@ public class InputManager : MonoBehaviour
         currentInput.direction = new Vector3(h, 0f, v);
         currentInput.isRunning = Input.GetKey(runKey);
 
+        currentInput.isJumpPressed = Input.GetKeyDown(jumpKey);
+        currentInput.isSkillPressed = Input.GetKeyDown(skillKey);
+        currentInput.isDashPressed =  Input.GetKey(dashKey);
+            
+            
         // Gather zoom input (scroll wheel + keys)
         float zoom = Input.GetAxis("Mouse ScrollWheel");
         

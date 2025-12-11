@@ -1,28 +1,37 @@
+using System.Collections;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class CharacterMovement : MonoBehaviour, IInputObserver
 {
-    [Header("Movement Settings")]
-    public float walkSpeed = 100f;
-    public float runSpeed = 200f;
-
-    public float staminaDrainRate = 5f;
-    public float staminaRegenRate = 5f;
-    
     [Header("References")]
     public Animator animator;
     public Transform cameraTransform;
     
     private CharacterController controller;
-    
     private InputManager inputManager;
-    private PlayerResources playerResources; // Reference to the PlayerStats script
-
+    private PlayerResources playerResources;
     
+    // Current state
+    private ICharacterState currentState;
+    
+    // All states
+    private IdleState idleState;
+    private WalkingState walkingState;
+    private SprintingState sprintingState;
+    private JumpingState jumpingState;
+    private DashingState dashingState;
+    private SkillCastingState skillCastingState;
+    private SkillActiveState skillActiveState;
+    
+    // Input data
     private Vector3 inputDirection;
     private bool isRunningInput;
-    private bool canRun;         // Store if running is currently allowed (enough stamina)
-
+    private bool isJumpPressed;
+    private bool isSkillPressed;
+    private bool isDashPressed;
+    
+    private Vector3 lastMeshLocalPosition;
 
     void Start()
     {
@@ -30,110 +39,98 @@ public class CharacterMovement : MonoBehaviour, IInputObserver
         inputManager = GetComponent<InputManager>();
         playerResources = GetComponent<PlayerResources>();
         
-        
         if (cameraTransform == null)
         {
             cameraTransform = Camera.main.transform;
         }
 
-        // Register this component as an observer
         if (inputManager != null)
         {
             inputManager.RegisterObserver(this);
         }
+        
+        if (animator != null)
+        {
+            lastMeshLocalPosition = animator.transform.localPosition;
+        }
+        
+        // Initialize all states
+        idleState = new IdleState(this);
+        walkingState = new WalkingState(this);
+        sprintingState = new SprintingState(this);
+        jumpingState = new JumpingState(this);
+        dashingState = new DashingState(this);
+        skillCastingState = new SkillCastingState(this);
+        skillActiveState = new SkillActiveState(this);
+        
+        // Start in idle state
+        TransitionToState(idleState);
     }
 
     void OnDestroy()
     {
-        // Unregister when destroyed
         if (inputManager != null)
         {
             inputManager.UnregisterObserver(this);
         }
     }
 
-    // Called by InputManager when input changes
     public void OnInputChanged(MovementInput input)
     {
         inputDirection = input.direction;
         isRunningInput = input.isRunning;
+        isJumpPressed = input.isJumpPressed;
+        isSkillPressed = input.isSkillPressed;
+        isDashPressed = input.isDashPressed;
     }
 
     void Update()
     {
-        ManageStamina(); 
-
-        
-        HandleMovement();
-        HandleAnimator();
-    }
-
-    private void ManageStamina()
-    {
-        bool isMoving = inputDirection.magnitude > 0.01f;
-        
-        if (isRunningInput && canRun && isMoving)
+        if (currentState != null)
         {
-            // Drain stamina if running is requested and allowed
-            playerResources.UseStamina(staminaDrainRate * Time.deltaTime);
-            
-            // Check if stamina hit zero
-            if (playerResources.StaminaPercentage() <= 0.01f) // Use percentage for safety
-            {
-                canRun = false; // Disable running until stamina recovers
-            }
-        }
-        else if (isMoving || !isRunningInput) // If not running, or if stamina is depleted
-        {
-            // Regen stamina if idle or walking/sprinting is disabled
-            playerResources.RegenStamina(staminaRegenRate * Time.deltaTime);
-            
-            // Re-enable running if stamina is above a certain threshold (e.g., 20%)
-            if (!canRun && playerResources.StaminaPercentage() > 0.2f) 
-            {
-                canRun = true;
-            }
-            
+            currentState.Update();
         }
     }
 
-    void HandleMovement()
+    public void TransitionToState(ICharacterState newState)
     {
-        bool actuallyRunning = isRunningInput && canRun;
-        float speed = actuallyRunning ? runSpeed : walkSpeed;
+        currentState?.Exit();
+        currentState = newState;
+        currentState?.Enter();
+    }
 
-        Vector3 cameraForward = cameraTransform.forward;
-        Vector3 cameraRight = cameraTransform.right;
+    // Getters for states to access
+    public CharacterController Controller => controller;
+    public PlayerResources Resources => playerResources;
+    public Animator Animator => animator;
+    public Transform CameraTransform => cameraTransform;
+    public Vector3 InputDirection => inputDirection;
+    public bool IsRunningInput => isRunningInput;
+    public bool IsJumpPressed => isJumpPressed;
+    public bool IsSkillPressed => isSkillPressed;
+    public bool IsDashPressed => isDashPressed;
     
-        cameraForward.y = 0f;
-        cameraRight.y = 0f;
-        cameraForward.Normalize();
-        cameraRight.Normalize();
-
-        Vector3 moveDirection = (cameraForward * inputDirection.z + cameraRight * inputDirection.x).normalized;
-
-        if (inputDirection.magnitude > 0.01f)
-        {
-            Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 10f);
-
-            controller.SimpleMove(moveDirection * speed);
-        }
-    }
-
-    void HandleAnimator()
+    // State getters
+    public IdleState IdleState => idleState;
+    public WalkingState WalkingState => walkingState;
+    public SprintingState SprintingState => sprintingState;
+    public JumpingState JumpingState => jumpingState;
+    public DashingState DashingState => dashingState;
+    public SkillCastingState SkillCastingState => skillCastingState;
+    public SkillActiveState SkillActiveState => skillActiveState;
+    
+    public void ResetJumpInput() => isJumpPressed = false;
+    public void ResetDashInput() => isDashPressed = false;
+    public void ResetSkillInput() => isSkillPressed = false;
+    
+    public Vector3 GetAnimationMovementDelta()
     {
-        bool isCurrentlyMoving = inputDirection.magnitude > 0.01f;
-        
-        bool actuallyRunning = isRunningInput && canRun;
-        
-        float targetSpeed = 0f;
-
-        if (isCurrentlyMoving)
+        if (animator != null)
         {
-            targetSpeed = actuallyRunning ? 2f : 1f;
+            Vector3 meshLocalDelta = animator.transform.localPosition - lastMeshLocalPosition;
+            animator.transform.localPosition = lastMeshLocalPosition;
+            return meshLocalDelta;
         }
-
-        animator.SetFloat("Speed", targetSpeed);
+        return Vector3.zero;
     }
 }
